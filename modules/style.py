@@ -1,48 +1,31 @@
 import streamlit as st
 
-def apply_custom_style():
+def apply_makkah_theme():
+    """تنسيق RTL كامل ودعم شاشات الجوال"""
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
     
-    :root {
-        --primary: #1E3A8A;
-        --secondary: #FBBF24;
-        --bg: #F8FAFC;
-    }
-
     html, body, [data-testid="stAppViewContainer"], .main {
-        font-family: 'Tajawal', sans-serif;
         direction: rtl;
         text-align: right;
-        background-color: var(--bg);
+        font-family: 'Tajawal', sans-serif;
     }
-
-    /* كروت التقييم العصرية */
-    .valuation-card {
-        background: white;
-        padding: 25px;
-        border-radius: 20px;
-        border-right: 8px solid var(--primary);
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-
-    /* تحسين القوائم والجوال */
-    [data-testid="stSidebar"] { direction: rtl; }
+    
+    /* جعل الحاويات متجاوبة على الجوال */
     @media (max-width: 768px) {
-        .stMetric { background: white; padding: 15px; border-radius: 15px; }
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: column !important;
+        }
     }
 
-    /* أزرار مخصصة */
-    .stButton>button {
-        border-radius: 12px;
-        background: linear-gradient(90deg, #1E3A8A 0%, #3B82F6 100%);
-        color: white;
-        border: none;
-        transition: 0.3s;
-        height: 3.5em;
-        width: 100%;
+    /* تصميم كروت النتائج */
+    .metric-card {
+        background-color: #ffffff;
+        border-right: 5px solid #1E3A8A;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     </style>
     """, unsafe_allow_html=True)
