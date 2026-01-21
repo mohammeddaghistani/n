@@ -1,67 +1,54 @@
 import streamlit as st
-import pandas as pd
+import folium
+from streamlit_folium import st_folium
+from modules.db import add_deal
 from datetime import datetime
-import arabic_reshaper
-from bidi.algorithm import get_display
-
-# --- دالة معالجة النصوص العربية ---
-def fix_arabic(text):
-    if not text:
-        return ""
-    reshaped_text = arabic_reshaper.reshape(text)
-    return get_display(reshaped_text)
 
 class SiteRentalValuation:
-    """نظام تحديد القيمة الإيجارية للموقع المتوافق مع اللوائح البلدية"""
-    
     def __init__(self):
-        self.valuation_factors = {
-            'location_factor': 1.2,
-            'area_factor': 1.0,
-            'zoning_factor': 1.1
-        }
+        # قائمة أحياء مكة المكرمة الرئيسية
+        self.makkah_neighborhoods = [
+            "العزيزية", "الشوقية", "البطحاء", "الرصيفة", "الشرائع", 
+            "جبل النور", "العوالي", "بطحاء قريش", "المسفلة", "المنصور"
+        ]
 
     def render_valuation(self):
-        """الدالة الأساسية لعرض واجهة التقييم"""
-        st.subheader("📊 تقييم القيمة الإيجارية للمواقع")
+        st.markdown("### 🗺️ تحديد الموقع والتقييم الإيجاري")
         
-        with st.container():
-            col1, col2 = st.columns(2)
-            with col1:
-                base_price = st.number_input("السعر الأساسي للمتر (ريال)", min_value=0.0, value=100.0)
-                site_area = st.number_input("مساحة الموقع الإجمالية (م²)", min_value=0.0, value=500.0)
+        tab1, tab2 = st.tabs(["📍 الخريطة (مكة)", "📝 بيانات التقييم"])
+        
+        with tab1:
+            st.info("انقر على الموقع في مكة المكرمة لتحديد الإحداثيات")
+            # إحداثيات مكة المكرمة الافتراضية
+            m = folium.Map(location=[21.3891, 39.8579], zoom_start=12)
+            m.add_child(folium.LatLngPopup())
+            map_data = st_folium(m, height=400, width="100%")
             
-            with col2:
-                site_type = st.selectbox("نوع الموقع", ["تجاري", "سكني", "صناعي", "زراعي"])
-                duration = st.number_input("مدة العقد (سنوات)", min_value=1, value=10)
+            if map_data and map_data.get("last_clicked"):
+                st.session_state.lat = map_data["last_clicked"]["lat"]
+                st.session_state.lng = map_data["last_clicked"]["lng"]
+                st.success(f"تم التحديد: {st.session_state.lat:.4f}, {st.session_state.lng:.4f}")
 
-            total_value = base_price * site_area * duration
-            st.metric("إجمالي القيمة التقديرية", f"{total_value:,.2f} ريال")
-
-            if st.button("📝 توليد مسودة الاتفاقية"):
-                self.show_agreement_preview(total_value, site_type)
-
-    def show_agreement_preview(self, value, s_type):
-        """عرض مسودة الاتفاقية مع إغلاق النص بشكل صحيح"""
-        
-        # السطر 1064 الذي كان يسبب المشكلة (تم إصلاحه وإغلاقه)
-        agreement_template = f"""
-        عقد تأجير موقع عقاري بلدي
-        --------------------------
-        بناءً على لوائح التصرف بالعقارات البلدية، تم الاتفاق على ما يلي:
-        
-        1. موضوع العقد: تأجير موقع {s_type}.
-        2. القيمة الإيجارية الإجمالية: {value:,.2f} ريال سعودي.
-        3. مدة العقد: تخضع للمدد المحددة في المادة 21 من اللائحة.
-        
-        الشروط العامة:
-        - يلتزم المستأجر باستخدام الموقع حسب الغرض المخصص.
-        - يخضع هذا العقد لأنظمة المملكة العربية السعودية ولوائح الوزارة.
-        
-        توقيع الطرف الأول (المؤجر): _________________
-        توقيع الطرف الثاني (المستأجر): _________________
-        """ # <--- تم إغلاق النص هنا بـ ثلاث علامات اقتباس لضمان عدم حدوث SyntaxError
-        
-        st.text_area("مسودة الاتفاقية", value=agreement_template, height=300)
-
-# نهاية الكلاس SiteRentalValuation
+        with tab2:
+            with st.form("valuation_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    neigh = st.selectbox("حي العقار (مكة)", self.makkah_neighborhoods)
+                    area = st.number_input("المساحة (م²)", min_value=1.0)
+                with col2:
+                    p_type = st.selectbox("نوع العقار", ["تجاري", "سكني", "استثماري"])
+                    base_price = st.number_input("سعر المتر التقديري", value=500.0)
+                
+                if st.form_submit_button("💾 حفظ وإصدار التقييم"):
+                    if 'lat' in st.session_state:
+                        deal_data = {
+                            'property_type': p_type, 'location': "مكة المكرمة",
+                            'neighborhood': neigh, 'area': area, 'price': base_price * area,
+                            'deal_date': datetime.now().date(), 'latitude': st.session_state.lat,
+                            'longitude': st.session_state.lng, 'activity_type': 'إيجار بلدي', 'notes': ''
+                        }
+                        did = add_deal(deal_data)
+                        st.session_state.site_info = deal_data
+                        st.success(f"✅ تم الحفظ بنجاح! رقم المرجع: {did}")
+                    else:
+                        st.error("⚠️ يرجى تحديد الموقع على الخريطة أولاً")
