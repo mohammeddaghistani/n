@@ -10,3 +10,4 @@ arabic-reshaper
 python-bidi
 pillow>=11.0.0
 requests
+streamlit-option-menu
