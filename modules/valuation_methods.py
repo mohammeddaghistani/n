@@ -1,54 +1,60 @@
 import pandas as pd
 import numpy as np
+import streamlit as st
 
-class ValuationMethods:
-    """فئة تجمع جميع طرق التقييم العقاري العلمية وفق المعايير الدولية IVS"""
+class ValuationEngine:
+    """محرك التقييم المعتمد على المعايير الدولية IVS"""
     
-    def sales_comparison_method(self, subject_property, comparable_properties, adjustments_matrix):
-        """معادلة مقارنة المبيعات المعدلة"""
-        adjusted_prices = []
-        for comp in comparable_properties:
-            base_price = comp.get('price_per_m2', 0)
-            total_adj = sum(adjustments_matrix.values()) / 100
-            adjusted_prices.append(base_price * (1 + total_adj))
-        
-        final_val = np.mean(adjusted_prices) if adjusted_prices else 0
-        return {
-            'total_value': final_val * subject_property.get('land_area', 1),
-            'value_per_m2': final_val,
-            'method': 'sales_comparison',
-            'confidence_score': 0.85
-        }
+    @staticmethod
+    def sales_comparison(area, price_per_m2, adjustments):
+        """أسلوب السوق: مقارنة المبيعات [cite: 734]"""
+        total_adj = sum(adjustments.values()) / 100
+        adjusted_price = price_per_m2 * (1 + total_adj)
+        return adjusted_price * area
 
-    def residual_method(self, property_data):
-        """معادلة القيمة المتبقية للأراضي الاستثمارية"""
-        gdv = property_data.get('gdv', 0)
-        costs = property_data.get('construction_cost', 0)
-        profit = property_data.get('developer_profit', 0.20)
-        land_value = gdv - (costs * (1 + profit))
-        return {'land_value': max(0, land_value), 'total_value': land_value, 'method': 'residual'}
+    @staticmethod
+    def residual_method(gdv, const_cost, developer_profit=0.20):
+        """أسلوب الدخل: طريقة القيمة المتبقية [cite: 862, 1369]"""
+        # المعادلة: قيمة الأرض = القيمة الإجمالية للتطوير - التكاليف (1 + الربح)
+        total_costs = const_cost * (1 + developer_profit)
+        land_value = gdv - total_costs
+        return max(0, land_value)
 
-    def dcf_method(self, property_data):
-        """معادلة التدفقات النقدية المخصومة DCF"""
-        income = property_data.get('annual_income', 0)
-        rate = property_data.get('discount_rate', 0.10)
-        years = property_data.get('forecast_years', 10)
-        pv = sum([income / ((1 + rate) ** t) for t in range(1, int(years) + 1)])
-        return {'total_present_value': pv, 'total_value': pv, 'method': 'dcf'}
+    @staticmethod
+    def dcf_valuation(annual_income, rate, years):
+        """أسلوب الدخل: التدفقات النقدية المخصومة [cite: 791, 1570]"""
+        # المعادلة: PV = Sum(Income / (1+r)^t)
+        pv = sum([annual_income / ((1 + rate) ** t) for t in range(1, int(years) + 1)])
+        return pv
 
-def apply_valuation_method(method_name, property_data, additional_data=None):
-    """دالة الربط الأساسية المطلوبة في ملف evaluation.py"""
-    valuator = ValuationMethods()
-    additional_data = additional_data or {}
+def render_valuation_ui():
+    st.title("🕋 محرك التقييم العقاري - مكة المكرمة")
+    engine = ValuationEngine()
     
-    if method_name == 'sales_comparison':
-        return valuator.sales_comparison_method(
-            property_data, 
-            additional_data.get('comparable_properties', []), 
-            additional_data.get('adjustments_matrix', {})
-        )
-    elif method_name == 'residual':
-        return valuator.residual_method(property_data)
-    elif method_name in ['dcf', 'discounted_cash_flow']:
-        return valuator.dcf_method(property_data)
-    return None
+    method = st.segmented_control(
+        "اختر منهجية التقييم المعتمدة",
+        ["مقارنة المبيعات", "القيمة المتبقية", "التدفقات النقدية (DCF)"],
+        default="مقارنة المبيعات"
+    )
+
+    with st.container(border=True):
+        if method == "مقارنة المبيعات":
+            c1, c2 = st.columns(2)
+            area = c1.number_input("المساحة (م²)", value=1000.0)
+            base_p = c2.number_input("سعر المتر المرجعي (ريال)", value=5000.0)
+            
+            st.markdown("##### ⚖️ معاملات التسوية (Adjustments)")
+            adj_loc = st.slider("ميزة الموقع %", -20, 20, 0)
+            adj_view = st.slider("الإطلالة والواجهة %", -10, 10, 0)
+            
+            result = engine.sales_comparison(area, base_p, {'loc': adj_loc, 'view': adj_view})
+            st.metric("القيمة التقديرية السوقية", f"{result:,.2f} ريال")
+
+        elif method == "القيمة المتبقية":
+            # تطبيق مثال الأراضي 3 من الدليل [cite: 1376]
+            gdv = st.number_input("القيمة الإجمالية للتطوير المتوقعة (GDV)", value=10000000.0)
+            c_cost = st.number_input("إجمالي تكاليف الإنشاء والرسوم", value=6000000.0)
+            profit = st.select_slider("نسبة ربح المطور", options=[0.15, 0.20, 0.25], value=0.20)
+            
+            land_val = engine.residual_method(gdv, c_cost, profit)
+            st.metric("قيمة الأرض المتبقية", f"{land_val:,.2f} ريال")
