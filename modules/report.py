@@ -1,71 +1,104 @@
-import plotly.express as px
 import streamlit as st
-import pandas as pd
-from datetime import datetime
 from fpdf import FPDF
-import base64
-from io import BytesIO
-import arabic_reshaper
+from arabic_reshaper import reshape
 from bidi.algorithm import get_display
+from datetime import datetime
+import os
 
-# --- دالة مساعدة لمعالجة النصوص العربية ---
-def fix_arabic(text):
-    """تحويل النص العربي ليكون متوافقاً مع مكتبة FPDF (تشكيل وعكس الاتجاه)"""
-    if not text:
-        return ""
-    # إعادة تشكيل الحروف (Shaping) ثم عكس الاتجاه (Bidi)
-    reshaped_text = arabic_reshaper.reshape(text)
-    return get_display(reshaped_text)
+# دالة معالجة النصوص العربية لـ PDF
+def ar(text):
+    if not text: return ""
+    reshaped_text = reshape(str(text))
+    bidi_text = get_display(reshaped_text)
+    return bidi_text
 
-class PDFReport(FPDF):
-    """فئة مخصصة لتوليد تقارير PDF تدعم العربية والـ Unicode """
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # إضافة خط يدعم العربية (يجب أن يكون في مجلد assets)
-        try:
-            self.add_font('DejaVu', '', 'assets/DejaVuSans.ttf', uni=True)
-            self.set_font('DejaVu', '', 12)
-        except Exception as e:
-            st.error(f"⚠️ خطأ: ملف الخط غير موجود في assets/DejaVuSans.ttf - {e}")
-
+class ProfessionalPDF(FPDF):
     def header(self):
-        """رأس الصفحة مع الشعار والعنوان """
-        try:
-            self.image('assets/logo.png', 10, 8, 33)
-        except:
-            pass 
-        
-        self.set_font('DejaVu', '', 16)
-        title = fix_arabic('تقرير التقييم العقاري المهني')
-        self.cell(0, 10, title, 0, 1, 'C')
-        self.ln(10)
+        # إضافة شعار أو عنوان في رأس الصفحة
+        self.set_font('Arial', 'B', 15)
+        self.cell(0, 10, ar("تقرير التقييم العقاري المهني"), ln=True, align='C')
+        self.ln(5)
 
     def footer(self):
-        """تذييل الصفحة مع رقم الصفحة """
         self.set_y(-15)
-        self.set_font('DejaVu', '', 8)
-        page_num = fix_arabic(f'الصفحة {self.page_no()}')
-        self.cell(0, 10, page_num, 0, 0, 'C')
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()} / {{nb}}', align='C')
 
-    def add_arabic_content(self, text):
-        """إضافة نصوص عربية متعددة الأسطر مع الحفاظ على التنسيق """
-        self.set_font('DejaVu', '', 12)
-        # تقسيم النص لأسطر ومعالجة كل سطر على حدة
-        for line in text.split('\n'):
-            if not line.strip():
-                self.ln(5)
-                continue
-            processed_line = fix_arabic(line)
-            self.multi_cell(w=0, h=10, txt=processed_line, align='R')
+def generate_pdf(data):
+    pdf = ProfessionalPDF()
+    pdf.add_page()
+    
+    # ملاحظة: يجب توفر ملف خط يدعم العربية مثل (Arial.ttf) في مجلد fonts
+    # إذا لم يتوفر، سيستخدم الخط الافتراضي (قد لا يظهر العربي بشكل صحيح بدون خط مخصص)
+    try:
+        pdf.add_font('ArabicFont', '', 'fonts/Arial.ttf', uni=True)
+        pdf.set_font('ArabicFont', '', 12)
+    except:
+        pdf.set_font('Arial', '', 12)
 
-def render_report_module(user_role):
-    """واجهة عرض التقارير في التطبيق """
-    st.markdown('<div class="main-header"><h2>📑 نظام التقارير والإحصائيات المهنية</h2></div>', unsafe_allow_html=True)
+    # --- القسم الأول: معلومات التقرير ---
+    pdf.set_fill_color(30, 58, 138) # لون أزرق (نفس القالب)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 10, ar("١. المعلومات الأساسية"), ln=True, fill=True, align='R')
+    pdf.set_text_color(0, 0, 0)
     
-    tab1, tab2 = st.tabs(["📊 تقارير التقييم", "📈 إحصائيات الأداء"])
+    pdf.ln(5)
+    pdf.cell(0, 10, ar(f"رقم التقرير: {data.get('valuation_number', 'VAL-2026-001')}"), ln=True, align='R')
+    pdf.cell(0, 10, ar(f"تاريخ التقييم: {data.get('deal_date', datetime.now().date())}"), ln=True, align='R')
     
-    with tab1:
-        st.subheader("📋 سجل التقارير المكتملة")
-        # هنا يتم استعراض التقارير المخزنة في قاعدة البيانات
-        # يمكن للمستخدم النقر على "عرض التقرير" لاستدعاء منطق PDFReport
+    # --- القسم الثاني: وصف العقار ---
+    pdf.ln(10)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 10, ar("٢. وصف العقار"), ln=True, fill=True, align='R')
+    pdf.set_text_color(0, 0, 0)
+    
+    pdf.ln(5)
+    pdf.cell(0, 10, ar(f"الموقع: {data.get('location', 'غير محدد')}"), ln=True, align='R')
+    pdf.cell(0, 10, ar(f"المساحة: {data.get('area', 0)} م²"), ln=True, align='R')
+    pdf.cell(0, 10, ar(f"الإحداثيات: {data.get('latitude', 0)}, {data.get('longitude', 0)}"), ln=True, align='R')
+
+    # --- القسم الثالث: النتائج المالية ---
+    pdf.ln(10)
+    pdf.set_draw_color(251, 191, 36) # لون ذهبي (نفس القالب)
+    pdf.set_line_width(1)
+    pdf.rect(10, pdf.get_y(), 190, 30)
+    
+    pdf.set_y(pdf.get_y() + 5)
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 10, ar(f"القيمة الإيجارية المقدرة: {data.get('price', 0)} ريال سعودي"), ln=True, align='C')
+    
+    return pdf.output(dest='S').encode('latin-1', errors='ignore')
+
+def render_report_module():
+    st.markdown("### 📄 إصدار تقارير التقييم")
+    
+    # جلب آخر بيانات تم التعامل معها من الجلسة
+    if 'site_info' not in st.session_state:
+        st.info("💡 لا توجد بيانات حالية لإصدار تقرير. قم بإجراء عملية تقييم أولاً.")
+        return
+
+    data = st.session_state.site_info
+
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.success("✅ البيانات جاهزة للتصدير")
+        with st.expander("🔍 استعراض بيانات التقرير قبل الطباعة"):
+            st.write(data)
+            
+    with col2:
+        # زر تحميل التقرير
+        pdf_bytes = generate_pdf(data)
+        st.download_button(
+            label="📥 تحميل التقرير (PDF)",
+            data=pdf_bytes,
+            file_name=f"Report_{data.get('location', 'Property')}.pdf",
+            mime="application/pdf",
+            width="stretch" # التزاماً بالتحديث الجديد بدلاً من use_container_width
+        )
+
+    # عرض القالب HTML (للمعاينة فقط)
+    st.divider()
+    st.markdown("#### 🖼️ معاينة تصميم التقرير")
+    # هنا نقوم بعرض القالب الذي أرسلته بشكل تفاعلي
+    st.components.v1.html(open("report_template.html", "r", encoding="utf-8").read(), height=600, scrolling=True)
