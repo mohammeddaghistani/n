@@ -11,20 +11,21 @@ def render_dashboard(user_role):
     conn.close()
 
     if df.empty:
-        st.info("لا توجد بيانات حالية لعرضها.")
+        st.warning("لا توجد بيانات حالية. قم بإضافة تقييمات من صفحة التقييم.")
         return
 
-    # مؤشرات سريعة
+    # صف المؤشرات
     c1, c2, c3 = st.columns(3)
-    c1.metric("إجمالي الصفقات", len(df))
-    c2.metric("متوسط المساحة", f"{df['area'].mean():.0f} م²")
-    c3.metric("أحدث إضافة", str(df['deal_date'].max()))
+    with c1: st.metric("إجمالي المواقع", len(df))
+    with c2: st.metric("متوسط المساحات", f"{df['area'].mean():.0f} م²")
+    with c3: st.metric("أحدث إضافة في مكة", df['neighborhood'].iloc[-1])
 
-    # رسوم بيانية
+    st.divider()
+    
     col_a, col_b = st.columns(2)
     with col_a:
-        fig1 = px.pie(df, names='property_type', title="توزيع أنواع العقارات", hole=0.4)
+        fig1 = px.pie(df, names='neighborhood', title="توزيع المواقع حسب أحياء مكة")
         st.plotly_chart(fig1, use_container_width=True)
     with col_b:
-        fig2 = px.bar(df, x='deal_date', y='area', title="المساحات المضافة زمنياً")
+        fig2 = px.bar(df, x='neighborhood', y='price', title="إجمالي القيم حسب الحي")
         st.plotly_chart(fig2, use_container_width=True)
